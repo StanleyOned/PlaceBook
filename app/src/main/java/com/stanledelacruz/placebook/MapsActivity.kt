@@ -1,6 +1,7 @@
 package com.stanledelacruz.placebook
 
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.support.v7.app.AppCompatActivity
 import android.os.Bundle
 import android.support.v4.app.ActivityCompat
@@ -9,13 +10,18 @@ import android.widget.Toast
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.api.GoogleApiClient
 import com.google.android.gms.location.*
+import com.google.android.gms.location.places.Place
+import com.google.android.gms.location.places.PlacePhotoMetadata
 import com.google.android.gms.location.places.Places
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.SupportMapFragment
+import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.MarkerOptions
 import com.google.android.gms.maps.model.PointOfInterest
+import com.stanledelacruz.placebook.adapter.BookMarkInfoWindowAdapter
 
 class MapsActivity : AppCompatActivity(), OnMapReadyCallback, GoogleApiClient.OnConnectionFailedListener {
 
@@ -36,10 +42,12 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, GoogleApiClient.On
             .findFragmentById(R.id.map) as SupportMapFragment
         mapFragment.getMapAsync(this)
         setupLocationClient()
+        setupGoogleClient()
     }
 
     override fun onMapReady(googleMap: GoogleMap) {
         mMap = googleMap
+        mMap.setInfoWindowAdapter(BookMarkInfoWindowAdapter(this))
         getCurrentLocation()
         mMap.setOnPoiClickListener {
             displayPoi(it)
@@ -94,18 +102,63 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, GoogleApiClient.On
     }
 
     private fun  displayPoi(pointOfInterest: PointOfInterest) {
+        displayPoiGetPlaceStep(pointOfInterest)
+    }
+
+    private fun displayPoiGetPlaceStep(pointOfInterest: PointOfInterest) {
         Places.GeoDataApi.getPlaceById(googleApiClient, pointOfInterest.placeId)
             .setResultCallback { places ->
                 if (places.status.isSuccess && places.count > 0) {
-                    val place = places.get(0)
-                    Toast.makeText(this,
-                                   "${place.name} ${place.phoneNumber}",
-                                    Toast.LENGTH_LONG)
-                                    .show()
+                    val place = places.get(0).freeze()
+                    displayPoiGetPhoto(place)
                 } else {
                     Log.e(TAG, "Error with getPlaceById ${places.status.statusMessage}")
                 }
                 places.release()
             }
+    }
+
+    private fun displayPoiGetPhoto(place: Place) {
+        Places.GeoDataApi.getPlacePhotos(googleApiClient, place.id)
+            .setResultCallback { result ->
+                if (result.status.isSuccess) {
+                    val photoDataBuffer = result.photoMetadata
+
+                    if (photoDataBuffer.count > 0) {
+                        val photo = photoDataBuffer.get(0).freeze()
+                        displayPoiGetPhotoStep(place, photo)
+                    }
+                    photoDataBuffer.release()
+                }
+            }
+    }
+
+    private fun displayPoiGetPhotoStep(place: Place, photo: PlacePhotoMetadata) {
+        photo.getScaledPhoto(googleApiClient,
+            resources.getDimensionPixelSize(R.dimen.default_image_width),
+            resources.getDimensionPixelSize(R.dimen.default_image_height))
+            .setResultCallback { result ->
+                if (result.status.isSuccess) {
+                    val image = result.bitmap
+                    displayPoiDisplayStep(place, image)
+                } else {
+                    displayPoiDisplayStep(place, null)
+                }
+            }
+    }
+
+    private fun displayPoiDisplayStep(place: Place, photo: Bitmap?) {
+        val iconPhoto = if (photo == null) {
+            BitmapDescriptorFactory.defaultMarker()
+        } else {
+            BitmapDescriptorFactory.fromBitmap(photo)
+        }
+
+        val marker = mMap.addMarker(MarkerOptions()
+            .position(place.latLng)
+            .title(place.name as? String)
+            .snippet(place.phoneNumber as String?)
+        )
+        marker.tag = photo
     }
 }
