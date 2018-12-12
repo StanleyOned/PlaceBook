@@ -1,12 +1,13 @@
-package com.stanledelacruz.placebook
+package com.stanledelacruz.placebook.ui
 
+import android.arch.lifecycle.ViewModel
+import android.arch.lifecycle.ViewModelProviders
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.support.v7.app.AppCompatActivity
 import android.os.Bundle
 import android.support.v4.app.ActivityCompat
 import android.util.Log
-import android.widget.Toast
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.api.GoogleApiClient
 import com.google.android.gms.location.*
@@ -17,17 +18,22 @@ import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.SupportMapFragment
-import com.google.android.gms.maps.model.BitmapDescriptorFactory
-import com.google.android.gms.maps.model.LatLng
-import com.google.android.gms.maps.model.MarkerOptions
-import com.google.android.gms.maps.model.PointOfInterest
+import com.google.android.gms.maps.model.*
+import com.stanledelacruz.placebook.R
 import com.stanledelacruz.placebook.adapter.BookMarkInfoWindowAdapter
+import com.stanledelacruz.placebook.model.Bookmark
+import com.stanledelacruz.placebook.viewmodel.MapsViewModel
+import kotlinx.android.synthetic.main.activity_maps.*
+import kotlinx.coroutines.experimental.CommonPool
+import kotlinx.coroutines.experimental.launch
 
 class MapsActivity : AppCompatActivity(), OnMapReadyCallback, GoogleApiClient.OnConnectionFailedListener {
 
     private lateinit var mMap: GoogleMap
     private lateinit var googleApiClient: GoogleApiClient
+    private lateinit var mapsViewModel: MapsViewModel
     private lateinit var fusedLocationProviderClient: FusedLocationProviderClient
+    internal class PlaceInfo(val place: Place? = null, val image: Bitmap? = null)
 
     companion object {
         private const val REQUEST_LOCATION = 1
@@ -47,10 +53,18 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, GoogleApiClient.On
 
     override fun onMapReady(googleMap: GoogleMap) {
         mMap = googleMap
-        mMap.setInfoWindowAdapter(BookMarkInfoWindowAdapter(this))
+        setupMapListeners()
+        setupViewModel()
         getCurrentLocation()
+    }
+
+    private fun setupMapListeners() {
+        mMap.setInfoWindowAdapter(BookMarkInfoWindowAdapter(this))
         mMap.setOnPoiClickListener {
             displayPoi(it)
+        }
+        mMap.setOnInfoWindowClickListener {
+            handleInfoWindowClick(it)
         }
     }
 
@@ -68,6 +82,17 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, GoogleApiClient.On
         Log.e(TAG, "Google play connection failed: " + result.errorMessage)
     }
 
+    private fun bind() {
+        mapsViewModel
+            .getBookmarkMarkerView()
+            ?.observe(this, android.arch.lifecycle.Observer<List<MapsViewModel.BookmarkMarkerView>> {
+            mMap.clear()
+                it?.let {
+                    displayAllBookmarks(it)
+                }
+        })
+    }
+
     private fun setupGoogleClient() {
         googleApiClient = GoogleApiClient.Builder(this)
             .enableAutoManage(this, this)
@@ -81,7 +106,8 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, GoogleApiClient.On
 
     private fun requestLocationPermissions() {
         ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION),
-            REQUEST_LOCATION)
+            REQUEST_LOCATION
+        )
     }
 
     private fun getCurrentLocation() {
@@ -159,6 +185,37 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, GoogleApiClient.On
             .title(place.name as? String)
             .snippet(place.phoneNumber as String?)
         )
-        marker.tag = photo
+        marker.tag = PlaceInfo(place, photo)
+    }
+
+    private fun handleInfoWindowClick(marker: Marker) {
+        val placeInfo = (marker.tag as PlaceInfo)
+        if (placeInfo.place != null && placeInfo.image != null) {
+            launch(CommonPool) {
+                mapsViewModel.addBookmarkFromPlace(placeInfo.place, placeInfo.image)
+            }
+        }
+        marker.remove()
+    }
+
+    private fun setupViewModel() {
+        mapsViewModel = ViewModelProviders.of(this).get(MapsViewModel::class.java)
+        bind()
+    }
+
+    private fun addPlaceMarker(bookmark: MapsViewModel.BookmarkMarkerView): Marker? {
+        val marker = mMap.addMarker(MarkerOptions()
+            .position(bookmark.location)
+            .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE))
+            .alpha(0.8f))
+        marker.tag = bookmark
+
+        return  marker
+    }
+
+    private fun displayAllBookmarks(bookmarks: List<MapsViewModel.BookmarkMarkerView>) {
+        for (bookmark in bookmarks) {
+            addPlaceMarker(bookmark)
+        }
     }
 }

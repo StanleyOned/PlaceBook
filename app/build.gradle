@@ -29,6 +29,17 @@ dependencies {
     implementation "com.google.android.gms:play-services-maps:$play_services_version"
     implementation "com.google.android.gms:play-services-location:$play_services_version"
     implementation "com.google.android.gms:play-services-places:$play_services_version"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:0.19.3"
+    // 1  Adds the main LifeCycle class along with extensions such as LiveData.
+    implementation "android.arch.lifecycle:extensions:" + "$architecture_version"
+    // 2 Adds the Room library.
+    implementation "android.arch.persistence.room:runtime:" + "$room_version"
+    // 3 Adds the annotation processor for the Room library.
+    annotationProcessor "android.arch.persistence.room:compiler:" + "$room_version"
+    // 4 Adds the annotation processor for the lifecycle classes.
+    annotationProcessor "android.arch.lifecycle:compiler:" + "$architecture_version"
+    // 5 Adds the Kotlin annotation processor for the Room library.
+    kapt "android.arch.persistence.room:compiler:" + "$room_version"
     testImplementation 'junit:junit:4.12'
     androidTestImplementation 'com.android.support.test:runner:1.0.2'
     androidTestImplementation 'com.android.support.test.espresso:espresso-core:3.0.2'
